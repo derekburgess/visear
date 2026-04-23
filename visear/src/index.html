@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visear BETA</title>
+    <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+    <div class="loading-overlay processing">
+        <div class="overlay-content">
+            <div class="processing-text">
+                <img src="../assets/api.svg" alt="Processing icon">
+                <p>Processing images...</p>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay searching">
+        <div class="overlay-content">
+           <div class="searching-text">
+                <img src="../assets/search_db.svg" alt="Searching icon">
+                <p>Searching...</p>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay dropping">
+        <div class="overlay-content">
+            <div class="searching-text">
+                <img src="../assets/delete.svg" alt="Remove directory icon">
+                <p>Removing directory...</p>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="initial-view" class="container">
+        <div class="brand"><h1>Visear</h1><p>BETA</p></div>
+        <h3>Your visual search assistant</h3>
+
+        <div id="api-setup">
+            <div class="input-group">
+                <input type="password" id="openai-api-key" placeholder="OpenAI API Key">
+                <input type="password" id="api-key" placeholder="RunPod API Key">
+                <input type="text" id="endpoint" placeholder="Endpoint ID">
+            </div>
+            <button id="save-settings">Connect</button>
+            <p class="contact-support">Looking for access? <b><span class="copy-text" title="Copy email">contact@visear.ai</span></b></p>
+        </div>
+
+        <button id="select-directory"><img src="../assets/folder.svg" alt="Select a directory icon" title="Select a directory"></button>
+    </div>
+
+    <div id="search-view" class="container" style="display: none;">
+        <div class="search-controls">
+            <button id="add-directory" title="Add a directory"><img src="../assets/folder.svg" alt="Select a directory icon" title="Add a directory"></button>
+            <div class="directory-filter">
+                <button id="filter-directory" title="Filter by directory"><img src="../assets/filter.svg" alt="Filter icon" title="Filter by directory"></button>
+                <div class="directory-dropdown">
+                    <div class="directory-list"></div>
+                </div>
+            </div>
+            <div class="search-input-container">
+                <input type="text" class="search-input" placeholder="Search" autocomplete="off">
+                <button id="enhance-button" title="Improve prompt using AI"><img src="../assets/prompt.svg" alt="Enhance prompt icon" title="Enhance!"></button>
+            </div>
+            <div class="results-limit">
+                <button id="limit-filter" title="Number of results"><img src="../assets/numbers.svg" alt="Results limit icon" title="Number of results"></button>
+                <div class="limit-dropdown">
+                    <div class="directory-item selected" data-limit="20">20</div>
+                    <div class="directory-item" data-limit="50">50</div>
+                    <div class="directory-item" data-limit="100">100</div>
+                </div>
+            </div>
+            <button id="relevance-check" title="Double check the relevance of the results">
+                <img src="../assets/graph.svg" alt="Check relevance icon">
+            </button>
+        </div>
+        <div class="results-container">
+            <ul class="results-list"></ul>
+            <p class="search-tip"><b>TIP:</b> Enter <code>DROP /directory</code> into the search field to remove that directory from the index.</p>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

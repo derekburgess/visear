@@ -1,0 +1,11 @@
+runpod
+numpy
+torch
+torchvision
+huggingface_hub
+transformers
+datasets
+accelerate
+num2words
+pillow
+flask

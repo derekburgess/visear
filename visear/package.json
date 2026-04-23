@@ -1,0 +1,82 @@
+{
+  "name": "visear",
+  "version": "1.0.0",
+  "description": "Your visual search assistant",
+  "author": {
+    "name": "Visear.ai | Author: Derek Burgess",
+    "email": "contact@visear.ai"
+  },
+  "main": "./src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.visear.app",
+    "productName": "Visear",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/vectra/**/*",
+      "node_modules/@xenova/**/*",
+      "node_modules/onnxruntime-node/**/*",
+      "src/services/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/appicon_mac.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "executableName": "visear",
+      "artifactName": "${productName}-${version}.${ext}",
+      "executableArgs": ["--no-sandbox"],
+      "icon": "assets/appicon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/appicon_win.ico"
+    },
+    "files": [
+      "assets/**/*",
+      "src/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@xenova/transformers/dist",
+        "to": "transformers"
+      }
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    }
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.15.1",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.5",
+    "electron-store": "^8.1.0",
+    "jimp": "^0.22.12",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.41.0",
+    "vectra": "^0.9.0"
+  },
+  "devDependencies": {
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  }
+}
