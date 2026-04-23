@@ -66,29 +66,17 @@ class VectorDB {
         if (!this.indices[directory] || !fs.existsSync(path.join(dirIndexPath, 'index.json'))) {
             try {
                 this.indices[directory] = new LocalIndex(dirIndexPath);
-                
+
                 if (!await this.indices[directory].isIndexCreated()) {
                     await this.indices[directory].createIndex();
                 }
             } catch (error) {
                 console.error(`Error creating index for ${directory}:`, error);
-                if (fs.existsSync(dirIndexPath)) {
-                    try {
-                        const files = fs.readdirSync(dirIndexPath);
-                        for (const file of files) {
-                            fs.unlinkSync(path.join(dirIndexPath, file));
-                        }
-                    } catch (e) {
-                        console.error(`Error cleaning up index files: ${e.message}`);
-                    }
-                }
-                
-                fs.mkdirSync(dirIndexPath, { recursive: true, mode: 0o755 });
-                this.indices[directory] = new LocalIndex(dirIndexPath);
-                await this.indices[directory].createIndex();
+                delete this.indices[directory];
+                return null;
             }
         }
-        
+
         return this.indices[directory];
     }
 
@@ -177,145 +165,35 @@ class VectorDB {
         }
         
         await this.initialize();
+
+        const perDirTopK = Math.min(limit + offset, 500);
+
+        const dirsToSearch = Array.isArray(selectedDirectories)
+            ? (selectedDirectories.length === 0 ? await this.getDirectories() : selectedDirectories)
+            : (selectedDirectories ? [selectedDirectories] : await this.getDirectories());
+
         let allResults = [];
-        
-        const estimatedLimit = limit * 3 + offset;
-        
-        if (selectedDirectories) {
-            if (Array.isArray(selectedDirectories)) {
-                if (selectedDirectories.length === 0) {
-                    const directories = await this.getDirectories();
-                    const perDirectoryLimit = Math.ceil(Math.min(estimatedLimit, 500) / Math.max(1, directories.length));
-                    
-                    for (const dir of directories) {
-                        const index = await this.getOrCreateIndex(dir);
-                        if (!index) continue;
-                        
-                        const textResults = await index.queryItems(queryEmbedding, perDirectoryLimit);
-                        const dirResults = textResults.map(result => ({
-                            ...result,
-                            directory: dir
-                        }));
-                        allResults = allResults.concat(dirResults);
-                    }
-                } else {
-                    const perDirectoryLimit = Math.ceil(Math.min(estimatedLimit, 500) / Math.max(1, selectedDirectories.length));
-                    
-                    for (const dir of selectedDirectories) {
-                        const index = await this.getOrCreateIndex(dir);
-                        if (!index) continue;
-                        
-                        const textResults = await index.queryItems(queryEmbedding, perDirectoryLimit);
-                        const dirResults = textResults.map(result => ({
-                            ...result,
-                            directory: dir
-                        }));
-                        allResults = allResults.concat(dirResults);
-                    }
-                }
-            } else {
-                const index = await this.getOrCreateIndex(selectedDirectories);
-                if (index) {
-                    const textResults = await index.queryItems(queryEmbedding, Math.min(estimatedLimit, 500));
-                    allResults = textResults.map(result => ({
-                        ...result,
-                        directory: selectedDirectories
-                    }));
-                }
-            }
-        } else {
-            const directories = await this.getDirectories();
-            const perDirectoryLimit = Math.ceil(Math.min(estimatedLimit, 500) / Math.max(1, directories.length));
-            
-            for (const dir of directories) {
-                const index = await this.getOrCreateIndex(dir);
-                if (!index) continue;
-                
-                const textResults = await index.queryItems(queryEmbedding, perDirectoryLimit);
-                const dirResults = textResults.map(result => ({
-                    ...result,
-                    directory: dir
-                }));
-                allResults = allResults.concat(dirResults);
-            }
+        for (const dir of dirsToSearch) {
+            const index = await this.getOrCreateIndex(dir);
+            if (!index) continue;
+
+            const textResults = await index.queryItems(queryEmbedding, '', perDirTopK);
+            allResults = allResults.concat(textResults.map(result => ({ ...result, directory: dir })));
         }
         
         if (allResults.length === 0) {
             return [];
         }
-        
-        allResults.sort((a, b) => b.score - a.score);
-        const bestMatch = allResults[0].item;
-        const bestImageEmbedding = bestMatch.metadata.imageEmbedding;
-        
-        const cosineSimilarity = (vecA, vecB) => {
-            const dotProduct = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
-            const magnitudeA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
-            const magnitudeB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
-            return magnitudeA && magnitudeB ? dotProduct / (magnitudeA * magnitudeB) : 0;
-        };
-        
-        const levenshteinDistance = (a, b) => {
-            if (a.length === 0) return b.length;
-            if (b.length === 0) return a.length;
-            
-            const matrix = Array(a.length + 1).fill().map(() => Array(b.length + 1).fill(0));
-            
-            for (let i = 0; i <= a.length; i++) {
-                matrix[i][0] = i;
-            }
-            
-            for (let j = 0; j <= b.length; j++) {
-                matrix[0][j] = j;
-            }
-            
-            for (let i = 1; i <= a.length; i++) {
-                for (let j = 1; j <= b.length; j++) {
-                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-                    matrix[i][j] = Math.min(
-                        matrix[i - 1][j] + 1,
-                        matrix[i][j - 1] + 1,
-                        matrix[i - 1][j - 1] + cost
-                    );
-                }
-            }
-            
-            return matrix[a.length][b.length];
-        };
-        
-        const levenshteinSimilarity = (text1, text2) => {
-            if (!text1 || !text2) return 0;
-            const distance = levenshteinDistance(text1.toLowerCase(), text2.toLowerCase());
-            const maxLength = Math.max(text1.length, text2.length);
-            return maxLength > 0 ? 1 - (distance / maxLength) : 1;
-        };
-        
-        const results = [];
-        for (const textResult of allResults) {
-            const imageEmbedding = textResult.item.metadata.imageEmbedding;
-            const imageScore = cosineSimilarity(imageEmbedding, bestImageEmbedding);
-            
-            let levenshteinScore = 0;
-            if (queryText && queryText.length > 0) {
-                levenshteinScore = levenshteinSimilarity(queryText, textResult.item.metadata.description);
-            }
 
-            const vectorWeight = 0.6;
-            const imageWeight = 0.2;
-            const levenshteinWeight = 0.2;
-            
-            const combinedScore = queryText 
-                ? (textResult.score * vectorWeight) + (imageScore * imageWeight) + (levenshteinScore * levenshteinWeight)
-                : (textResult.score * 0.7) + (imageScore * 0.3);
-            
-            results.push({
-                directory: textResult.item.metadata.directory,
-                path: textResult.item.metadata.filePath,
-                image: textResult.item.metadata.image,
-                description: textResult.item.metadata.description,
-                similarity: combinedScore
-            });
-        }
+        allResults.sort((a, b) => b.score - a.score);
+
+        const results = allResults.map(textResult => ({
+            directory: textResult.item.metadata.directory,
+            path: textResult.item.metadata.filePath,
+            image: textResult.item.metadata.image,
+            description: textResult.item.metadata.description,
+            similarity: textResult.score
+        }));
 
         const maxScore = Math.max(...results.map(r => r.similarity));
         const minScore = Math.min(...results.map(r => r.similarity));
@@ -326,10 +204,8 @@ class VectorDB {
             similarity: range > 0 ? (result.similarity - minScore) / range : 1
         }));
 
-        normalizedResults.sort((a, b) => b.similarity - a.similarity);
-        
         const paginatedResults = normalizedResults.slice(offset, Math.min(offset + limit, normalizedResults.length));
-        
+
         return this.manageCache(fullCacheKey, paginatedResults);
     }
 
@@ -351,43 +227,18 @@ class VectorDB {
             return this.searchCache[fullCacheKey].results;
         }
         
+        const dirsToCount = Array.isArray(selectedDirectories)
+            ? (selectedDirectories.length === 0 ? await this.getDirectories() : selectedDirectories)
+            : (selectedDirectories ? [selectedDirectories] : await this.getDirectories());
+
         let totalCount = 0;
-        
-        if (selectedDirectories) {
-            if (Array.isArray(selectedDirectories)) {
-                if (selectedDirectories.length === 0) {
-                    const directories = await this.getDirectories();
-                    for (const dir of directories) {
-                        const index = await this.getOrCreateIndex(dir);
-                        if (!index) continue;
-                        const textResults = await index.queryItems(queryEmbedding, 1000);
-                        totalCount += textResults.length;
-                    }
-                } else {
-                    for (const dir of selectedDirectories) {
-                        const index = await this.getOrCreateIndex(dir);
-                        if (!index) continue;
-                        const textResults = await index.queryItems(queryEmbedding, 1000);
-                        totalCount += textResults.length;
-                    }
-                }
-            } else {
-                const index = await this.getOrCreateIndex(selectedDirectories);
-                if (index) {
-                    const textResults = await index.queryItems(queryEmbedding, 1000);
-                    totalCount = textResults.length;
-                }
-            }
-        } else {
-            const directories = await this.getDirectories();
-            for (const dir of directories) {
-                const index = await this.getOrCreateIndex(dir);
-                if (!index) continue;
-                const textResults = await index.queryItems(queryEmbedding, 1000);
-                totalCount += textResults.length;
-            }
+        for (const dir of dirsToCount) {
+            const index = await this.getOrCreateIndex(dir);
+            if (!index) continue;
+            const items = await index.listItems();
+            totalCount += items.length;
         }
-        
+
         if (!this.searchCache) this.searchCache = {};
         return this.manageCache(fullCacheKey, totalCount);
     }

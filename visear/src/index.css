@@ -58,8 +58,8 @@ button img {display:block; width:24px; height:24px; margin:0 auto;}
 #filter-directory:focus, #limit-filter:focus {outline:none;}
 #select-directory, #save-settings {width:256px; margin-top:20px; padding:20px 30px; font-size:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 #add-directory, #filter-directory, #limit-filter, #relevance-check {min-width:68px; min-height:68px;}
-#select-directory:disabled, #save-settings:disabled {opacity:0.5; cursor:not-allowed;}
-#select-directory:not(:disabled):hover, #save-settings:not(:disabled):hover, #add-directory:hover, #filter-directory:hover, #limit-filter:hover, #relevance-check:hover {background-color:#7200dd;}
+#select-directory:disabled, #save-settings:disabled, #relevance-check:disabled {opacity:0.5; cursor:not-allowed;}
+#select-directory:not(:disabled):hover, #save-settings:not(:disabled):hover, #add-directory:hover, #filter-directory:hover, #limit-filter:hover, #relevance-check:not(:disabled):hover {background-color:#7200dd;}
 #relevance-check.active {background-color:#7200dd; border-color:#fff;}
 
 .loading-overlay {display:none; position:fixed; inset:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.9); justify-content:center; align-items:center; z-index:1000;}
@@ -94,7 +94,7 @@ button img {display:block; width:24px; height:24px; margin:0 auto;}
   100% {border:1px solid rgba(255, 255, 255, 1.0);}
 }
 
-.directory-filter, .results-limit {position:relative;}
+.directory-filter, .results-limit {position:relative; display:flex;}
 .directory-dropdown, .limit-dropdown {display:none; position:absolute; top:100%; margin-top:10px; background-color:#111; border:1px solid #7200dd; border-radius:8px; z-index:1000; overflow-x:hidden; overflow-y:auto;}
 .directory-dropdown {left:0; min-width:200px; max-width:400px; max-height:400px;}
 .limit-dropdown {right:0; min-width:80px;}

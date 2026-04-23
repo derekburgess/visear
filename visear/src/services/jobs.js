@@ -114,18 +114,30 @@ async function relevanceCheck(base64Image, query) {
     });
 }
 
-async function processBatch(imagePaths, progressCallback = null) {
+async function runBatchedJobs({
+    items,
+    label,
+    submitJob,
+    handleCompletion,
+    handleSubmitError,
+    handleCheckError,
+    onProgress
+}) {
     const totalWorkers = await checkAvailableWorkers();
     let workerCount = Math.min(2, totalWorkers);
     let lastRampTime = Date.now();
-    
-    console.log(`⏳ Processing ${imagePaths.length} images using ${workerCount} / ${totalWorkers} workers.\n`);
-    
+    const totalItems = items.length;
+
+    console.log(`⏳ ${label} using ${workerCount} / ${totalWorkers} workers.\n`);
+
     const results = [];
     const activeJobs = new Map();
-    const pendingImages = [...imagePaths];
+    const pendingItems = [...items];
     let processedCount = 0;
-    
+
+    const pushResult = (r) => { if (r != null) results.push(r); };
+    const reportProgress = () => { if (onProgress) onProgress(processedCount, totalItems); };
+
     const startBatch = async () => {
         const now = Date.now();
         if (workerCount < totalWorkers && now - lastRampTime >= 10000) {
@@ -133,156 +145,109 @@ async function processBatch(imagePaths, progressCallback = null) {
             lastRampTime = now;
             console.log(`\n🚀 Ramping up to ${workerCount} / ${totalWorkers} workers.\n`);
         }
-        
-        while (activeJobs.size < workerCount && pendingImages.length > 0) {
-            const imagePath = pendingImages.shift();
+
+        while (activeJobs.size < workerCount && pendingItems.length > 0) {
+            const item = pendingItems.shift();
             try {
-                const base64Image = await convertToBase64(imagePath);
-                const jobInfo = await imageProcessing(base64Image);
-                activeJobs.set(jobInfo.id, {
-                    imagePath,
-                    base64Image,
-                    startTime: Date.now()
-                });
+                const { id, context } = await submitJob(item);
+                activeJobs.set(id, { context, startTime: Date.now() });
             } catch (error) {
-                console.error(`Error processing ${imagePath}: ${error.message}`);
-                results.push({
-                    imagePath,
-                    success: false,
-                    error: `Error: ${error.message}`
-                });
+                pushResult(handleSubmitError(item, error));
                 processedCount++;
-                if (progressCallback) progressCallback(processedCount);
+                reportProgress();
             }
         }
     };
-    
+
     await startBatch();
-    
-    while (activeJobs.size > 0 || pendingImages.length > 0) {
+
+    while (activeJobs.size > 0 || pendingItems.length > 0) {
         const jobsToCheck = Array.from(activeJobs.entries());
-        
+
         for (const [jobId, jobData] of jobsToCheck) {
             try {
                 const status = await checkJobStatus(jobId);
-                
+
                 if (status.completed) {
                     activeJobs.delete(jobId);
                     processedCount++;
-                    if (progressCallback) progressCallback(processedCount);
-                    
-                    if (status.success) {
-                        results.push({
-                            imagePath: jobData.imagePath,
-                            base64Image: jobData.base64Image,
-                            success: true,
-                            ...status.output
-                        });
-                        console.log(`✅ Processed image: ${jobData.imagePath}`);
-                    } else {
-                        results.push({
-                            imagePath: jobData.imagePath,
-                            success: false,
-                            error: status.error || 'Unknown error'
-                        });
-                    }
-                    
-                    if (pendingImages.length > 0) {
-                        await startBatch();
-                    }
+                    reportProgress();
+                    pushResult(handleCompletion(jobData.context, status));
+                    if (pendingItems.length > 0) await startBatch();
                 }
             } catch (error) {
-                console.error(`Error checking job ${jobId}: ${error.message}`);
                 activeJobs.delete(jobId);
-                results.push({
-                    imagePath: jobData.imagePath,
-                    success: false,
-                    error: `Job check error: ${error.message}`
-                });
                 processedCount++;
-                if (progressCallback) progressCallback(processedCount);
+                reportProgress();
+                pushResult(handleCheckError(jobData.context, error));
             }
         }
-        
+
         if (activeJobs.size > 0) {
             await new Promise(resolve => setTimeout(resolve, config.constants.POLL_INTERVAL_MS));
         }
     }
-    
+
+    return results;
+}
+
+async function processBatch(imagePaths, progressCallback = null) {
+    const results = await runBatchedJobs({
+        items: imagePaths,
+        label: `Processing ${imagePaths.length} images`,
+        submitJob: async (imagePath) => {
+            const base64Image = await convertToBase64(imagePath);
+            const jobInfo = await imageProcessing(base64Image);
+            return { id: jobInfo.id, context: { imagePath, base64Image } };
+        },
+        handleCompletion: ({ imagePath, base64Image }, status) => {
+            if (status.success) {
+                console.log(`✅ Processed image: ${imagePath}`);
+                return { imagePath, base64Image, success: true, ...status.output };
+            }
+            return { imagePath, success: false, error: status.error || 'Unknown error' };
+        },
+        handleSubmitError: (imagePath, error) => {
+            console.error(`Error processing ${imagePath}: ${error.message}`);
+            return { imagePath, success: false, error: `Error: ${error.message}` };
+        },
+        handleCheckError: ({ imagePath }, error) => {
+            console.error(`Error checking job for ${imagePath}: ${error.message}`);
+            return { imagePath, success: false, error: `Job check error: ${error.message}` };
+        },
+        onProgress: progressCallback
+    });
+
     console.log(`✅ Processing complete for ${results.length} images.`);
     return results;
 }
 
 async function batchRelevance(imageResults, query, progressCallback = null) {
-    const totalWorkers = await checkAvailableWorkers();
-    let workerCount = Math.min(2, totalWorkers);
-    let lastRampTime = Date.now();
-    
-    console.log(`\n⏳ Checking relevance of ${imageResults.length} images using ${workerCount} / ${totalWorkers} workers.\n`);
-    
-    const results = [];
-    const activeJobs = new Map();
-    const pendingImages = [...imageResults];
-    const totalImages = imageResults.length;
-    let processedCount = 0;
-    
-    const startBatch = async () => {
-        const now = Date.now();
-        if (workerCount < totalWorkers && now - lastRampTime >= 10000) {
-            workerCount = Math.min(workerCount + 2, totalWorkers);
-            lastRampTime = now;
-            console.log(`\n🚀 Ramping up to ${workerCount} / ${totalWorkers} workers.\n`);
-        }
-        
-        while (activeJobs.size < workerCount && pendingImages.length > 0) {
-            const imageResult = pendingImages.shift();
-            try {
-                const jobInfo = await relevanceCheck(imageResult.image, query);
-                activeJobs.set(jobInfo.id, {
-                    imageResult,
-                    startTime: Date.now()
-                });
-            } catch (error) {
-                processedCount++;
-                if (progressCallback) progressCallback(processedCount, totalImages);
+    return runBatchedJobs({
+        items: imageResults,
+        label: `Checking relevance of ${imageResults.length} images`,
+        submitJob: async (imageResult) => {
+            const jobInfo = await relevanceCheck(imageResult.image, query);
+            return { id: jobInfo.id, context: { imageResult } };
+        },
+        handleCompletion: ({ imageResult }, status) => {
+            if (status.success && status.output.success && status.output.is_relevant) {
+                console.log(`✅ Relevant`);
+                return imageResult;
             }
-        }
-    };
-    
-    await startBatch();
-    
-    while (activeJobs.size > 0 || pendingImages.length > 0) {
-        const jobsToCheck = Array.from(activeJobs.entries());
-        
-        for (const [jobId, jobData] of jobsToCheck) {
-            try {
-                const status = await checkJobStatus(jobId);
-                
-                if (status.completed) {
-                    activeJobs.delete(jobId);
-                    processedCount++;
-                    if (progressCallback) progressCallback(processedCount, totalImages);
-                    
-                    if (status.success && status.output.success && status.output.is_relevant) {
-                        results.push(jobData.imageResult);
-                        console.log(`✅ Relevant`);
-                    } else {
-                        console.log(`❌ Not relevant`);
-                    }
-                    
-                    if (pendingImages.length > 0) {
-                        await startBatch();
-                    }
-                }
-            } catch (error) {
-            }
-        }
-        
-        if (activeJobs.size > 0) {
-            await new Promise(resolve => setTimeout(resolve, config.constants.POLL_INTERVAL_MS));
-        }
-    }
-    return results;
+            console.log(`❌ Not relevant`);
+            return null;
+        },
+        handleSubmitError: (imageResult, error) => {
+            console.error(`Error submitting relevance job for ${imageResult.path}: ${error.message}`);
+            return null;
+        },
+        handleCheckError: ({ imageResult }, error) => {
+            console.error(`Error checking relevance job for ${imageResult.path}: ${error.message}`);
+            return null;
+        },
+        onProgress: progressCallback
+    });
 }
 
 module.exports = {

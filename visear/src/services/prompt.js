@@ -17,7 +17,7 @@ async function enhancePrompt(prompt, apiKey) {
         const systemPrompt = store.get('openai.systemPrompt') || defaultSystemPrompt;
 
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: 'gpt-5.4-mini',
             messages: [
                 {
                     role: 'system',
@@ -29,7 +29,7 @@ async function enhancePrompt(prompt, apiKey) {
                 }
             ],
             temperature: 0.5,
-            max_tokens: 64
+            max_completion_tokens: 64
         });
 
         const enhancedPrompt = completion.choices[0].message.content.trim();

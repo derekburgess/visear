@@ -1,3 +1,7 @@
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[c]));
+
 document.addEventListener('DOMContentLoaded', async () => {
     const elements = {
         initialView: document.getElementById('initial-view'),
@@ -35,6 +39,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentOffset = 0;
     let isLoading = false;
     let hasMoreResults = true;
+
+    async function refreshRelevanceAvailability() {
+        const reachable = await window.electronAPI.checkEndpoint();
+        elements.relevanceCheck.disabled = !reachable;
+        if (reachable) {
+            elements.relevanceCheck.title = 'Double check the relevance of the results';
+        } else {
+            elements.relevanceCheck.classList.remove('active');
+            elements.relevanceCheck.title = 'Unavailable - no RunPod workers are running';
+        }
+    }
 
     elements.selectDirButton.style.display = 'none';
     elements.apiSetup.style.display = 'block';
@@ -82,6 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             elements.initialView.style.display = 'none';
             elements.searchView.style.display = 'block';
             await updateDirectoryList();
+            await refreshRelevanceAvailability();
             elements.searchInput.focus();
         } else {
             elements.apiSetup.style.display = 'none';
@@ -108,10 +124,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (result.success) {
             const { success, exists, count } = await window.electronAPI.checkDatabase();
             if (success && exists && count > 0) {
-                setTimeout(() => {
+                setTimeout(async () => {
                     elements.initialView.style.display = 'none';
                     elements.searchView.style.display = 'block';
-                    updateDirectoryList();
+                    await updateDirectoryList();
+                    await refreshRelevanceAvailability();
                     elements.searchInput.focus();
                 }, 1000);
             } else {
@@ -215,19 +232,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (results.length === 0) {
             hasMoreResults = false;
         } else {
-            const resultsHtml = results.map(result => `
+            const resultsHtml = results.map(result => {
+                const description = escapeHtml(result.description);
+                const resultPath = escapeHtml(result.path);
+                return `
                 <li class="result-item">
-                    <img src="data:image/jpeg;base64,${result.image}" 
+                    <img src="data:image/jpeg;base64,${escapeHtml(result.image)}"
                          class="result-image">
                     <div class="result-details">
-                        <p title="Similarity score. Visear computes similarity score by combining vector embeddings of text descriptions, visual similarity between images, and text matching using Levenshtein distance. Higher scores indicate better matches across all three factors." >${(result.similarity * 100).toFixed(1)}%</p>
-                        <img src="../assets/replace.svg" alt="Find similar images" title="Search for similar images" class="similar-icon" data-description="${result.description}">
-                        <img src="../assets/info.svg" alt="Image path info icon" title="${result.description}" class="info-icon" data-description="${result.description}">
-                        <img src="../assets/copy.svg" alt="Copy image path icon" title="${result.path}" class="copy-icon" data-path="${result.path}">
+                        <p title="Similarity score. Cosine similarity of the query's text embedding against each image's caption embedding, normalized within the current result batch for display." >${(result.similarity * 100).toFixed(1)}%</p>
+                        <img src="../assets/replace.svg" alt="Find similar images" title="Search for similar images" class="similar-icon" data-description="${description}">
+                        <img src="../assets/info.svg" alt="Image path info icon" title="${description}" class="info-icon" data-description="${description}">
+                        <img src="../assets/copy.svg" alt="Copy image path icon" title="${resultPath}" class="copy-icon" data-path="${resultPath}">
                         <span class="copy-feedback"></span>
                     </div>
                 </li>
-            `).join('');
+            `;
+            }).join('');
             
             if (append) {
                 elements.resultsList.innerHTML += resultsHtml;
@@ -270,10 +291,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         selectedDirectories = [...directories];
         
         directories.forEach(dir => {
+            const safeId = `dir-${dir.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            const safeDir = escapeHtml(dir);
             dropdownContent.push(`
                 <div class="directory-item">
-                    <input type="checkbox" id="dir-${dir.replace(/[^a-zA-Z0-9]/g, '-')}" data-dir="${dir}" checked>
-                    <label for="dir-${dir.replace(/[^a-zA-Z0-9]/g, '-')}">${dir}</label>
+                    <input type="checkbox" id="${safeId}" data-dir="${safeDir}" checked>
+                    <label for="${safeId}">${safeDir}</label>
                 </div>
             `);
         });

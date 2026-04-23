@@ -1,10 +1,12 @@
-const Jimp = require('jimp');
-const fs = require('fs').promises;
+const sharp = require('sharp');
 
 async function convertToBase64(imagePath) {
-    const image = await Jimp.read(imagePath);
-    const base64 = await image.quality(50).getBase64Async(Jimp.MIME_JPEG);
-    return base64.replace(/^data:image\/jpeg;base64,/, '');
+    const buf = await sharp(imagePath)
+        .rotate()
+        .resize({ width: 1024, withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+    return buf.toString('base64');
 }
 
 async function isImageTiff(imagePath) {
@@ -14,4 +16,4 @@ async function isImageTiff(imagePath) {
 module.exports = {
     convertToBase64,
     isImageTiff
-}; 
+};

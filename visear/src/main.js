@@ -5,7 +5,7 @@ app.disableHardwareAcceleration()
 const path = require('path')
 const fs = require('fs/promises')
 const { computeEmbedding } = require('./services/compute')
-const { processBatch, batchRelevance, checkEndpointStatus } = require('./services/jobs')
+const { processBatch, batchRelevance, checkEndpointStatus, checkAvailableWorkers } = require('./services/jobs')
 const vectordb = require('./services/vectordb')
 const Store = require('electron-store')
 
@@ -27,23 +27,14 @@ function createWindow() {
   win.loadFile('src/index.html')
 }
 
-function reloadConfigIfNeeded() {
-  Object.keys(require.cache).forEach(key => {
-    if (key.includes('config.js')) {
-      delete require.cache[key]
-    }
-  })
-}
-
 app.whenReady().then(async () => {
   createWindow()
-  
+
   const apiKey = store.get('runpod.apiKey')
   const endpoint = store.get('runpod.endpoint')
   if (apiKey && endpoint) {
     process.env.RUNPOD_API_KEY = apiKey
     process.env.RUNPOD_ENDPOINT = endpoint
-    reloadConfigIfNeeded()
   }
 
   app.on('activate', () => {
@@ -77,9 +68,7 @@ ipcMain.handle('credentials:set', async (event, apiKey, endpoint, openaiApiKey) 
   
   process.env.RUNPOD_API_KEY = apiKey
   process.env.RUNPOD_ENDPOINT = endpoint
-  
-  reloadConfigIfNeeded()
-  
+
   const testEndpoint = `https://api.runpod.ai/v2/${endpoint}/run`
   
   const headers = {
@@ -204,7 +193,7 @@ ipcMain.handle('search:images', async (event, query, checkRelevance, selectedDir
     }
     
     event.sender.send('search:progress', 10)
-    const queryEmbedding = await computeEmbedding(query)
+    const queryEmbedding = await computeEmbedding(query, 'query')
     
     const totalCount = await vectordb.getTotalCount(Array.from(queryEmbedding.data), selectedDirectories, query)
     
@@ -255,6 +244,15 @@ ipcMain.handle('enhance:prompt', async (event, prompt) => {
       };
   }
 });
+
+ipcMain.handle('endpoint:check', async () => {
+  try {
+    const workers = await checkAvailableWorkers()
+    return workers > 0
+  } catch {
+    return false
+  }
+})
 
 ipcMain.handle('get:directories', async () => {
     await vectordb.initialize()
