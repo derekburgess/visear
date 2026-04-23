@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = true
+app.commandLine.appendSwitch('log-level', '3')
 app.disableHardwareAcceleration()
 
 const path = require('path')
