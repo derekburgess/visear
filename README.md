@@ -1,5 +1,5 @@
-Visear is an image cataloging and searching application that runs on local hardware using smol VLM's and Transformers.js -- It also has a backend that can be deployed for use with more advanced models. The application experience allows for bulk classification of images, with a "Google Images" inspired search results interface.
+Visear is an image cataloging and searching application that runs on local hardware using smol VLM's and Transformers.js -- It also has a backend that can be deployed for use with more advanced models. The application experience allows for bulk classification of images, provides a search bar, and image grid search results interface.
 
-Originally created in 2024, this was a private repo until recently. Now it exists as a demonstration of the capabilities of small models.
+Originally created in 2024, this was a private repo until recently. Now it exists as a demonstration of the capabilities of small models and transformers.js
 
 ![Visear screenshot](assets/screenshot.png)
